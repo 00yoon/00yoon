@@ -1,0 +1,9 @@
+{
+  "name": "수학 풀이 교실",
+  "short_name": "풀이교실",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f5f6f8",
+  "theme_color": "#2f6fed",
+  "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml" }]
+}
