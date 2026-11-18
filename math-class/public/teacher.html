@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#2f6fed">
+<link rel="manifest" href="/manifest.webmanifest">
+<title>수학 풀이 교실 - 선생님</title>
+<link rel="stylesheet" href="/vendor/katex/katex.min.css">
+<link rel="stylesheet" href="/css/app.css">
+<link rel="stylesheet" href="/css/teacher.css">
+</head>
+<body>
+<header class="topbar">
+  <a href="#/" class="brand">✏️ 풀이 교실</a>
+  <nav id="nav">
+    <a href="#/">홈</a>
+    <a href="#/classes">학급</a>
+    <a href="#/sets">문제 세트</a>
+    <a href="#/lessons">수업 기록</a>
+    <a href="#/admin" id="nav-admin" class="hidden">교사 관리</a>
+  </nav>
+  <span class="spacer"></span>
+  <a href="#/account" id="me" class="small"></a>
+</header>
+<main id="view"></main>
+<script src="/vendor/katex/katex.min.js"></script>
+<script src="/socket.io/socket.io.min.js"></script>
+<script type="module" src="/js/teacher.js"></script>
+</body>
+</html>

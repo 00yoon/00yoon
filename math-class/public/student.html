@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#2f6fed">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="manifest" href="/manifest.webmanifest">
+<title>수학 풀이 교실 - 학생</title>
+<link rel="stylesheet" href="/vendor/katex/katex.min.css">
+<link rel="stylesheet" href="/css/app.css">
+<style>
+  body { overflow: hidden; overscroll-behavior: none; -webkit-user-select: none; user-select: none; }
+  .app { display: flex; flex-direction: column; height: 100dvh; }
+  header { display: flex; align-items: center; gap: 10px; padding: 8px 12px; background: #fff; border-bottom: 1px solid var(--line); }
+  .who { font-weight: 700; white-space: nowrap; }
+  .ptabs { display: flex; gap: 6px; overflow-x: auto; flex: 1; padding: 2px; scrollbar-width: none; }
+  .ptabs button { min-width: 48px; min-height: 40px; position: relative; }
+  .ptabs button.cur { background: var(--primary); color: #fff; border-color: var(--primary); }
+  .ptabs button.done::after { content: "✓"; position: absolute; top: -4px; right: -4px; background: var(--ok); color: #fff; border-radius: 99px; font-size: 10px; width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: #9ca3af; flex: none; }
+  .dot.on { background: var(--ok); }
+  main { flex: 1; display: flex; min-height: 0; }
+  .ppanel { background: #fff; overflow: auto; padding: 14px 16px; border-right: 1px solid var(--line); }
+  .work { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0; position: relative; }
+  .board-wrap { flex: 1; padding: 10px 10px 10px 68px; }
+  .tools { position: absolute; left: 8px; top: 10px; display: flex; flex-direction: column; gap: 6px; z-index: 5; background: #fff; padding: 6px; border-radius: 14px; box-shadow: 0 2px 10px rgba(0,0,0,.12); }
+  .tools button { width: 44px; height: 44px; min-height: 0; padding: 0; border-radius: 10px; font-size: 18px; }
+  .tools .sw { width: 22px; height: 22px; border-radius: 50%; display: block; }
+  .tools hr { border: none; border-top: 1px solid var(--line); margin: 2px 0; width: 100%; }
+  .answer { display: flex; gap: 8px; align-items: center; padding: 8px 12px; background: #fff; border-top: 1px solid var(--line); }
+  .answer input { font-size: 18px; }
+  .answer .st { font-size: 13px; white-space: nowrap; }
+  /* 세로(태블릿 세로/폰): 문제를 위로 */
+  @media (orientation: portrait), (max-width: 820px) {
+    main { flex-direction: column; }
+    .ppanel { border-right: none; border-bottom: 1px solid var(--line); max-height: 34vh; }
+    .ppanel.collapsed { max-height: 52px; overflow: hidden; }
+  }
+  @media (orientation: landscape) and (min-width: 821px) { .ppanel { width: 36%; max-width: 520px; } .toggle-p { display: none; } }
+  .overlay { position: fixed; inset: 0; background: var(--bg); display: flex; align-items: center; justify-content: center; z-index: 50; padding: 20px; text-align: center; }
+  .msg { position: fixed; top: 64px; left: 50%; transform: translateX(-50%); z-index: 60; width: min(560px, 92vw); background: #fff; border: 2px solid var(--primary); border-radius: 14px; padding: 14px 16px; box-shadow: 0 8px 30px rgba(0,0,0,.18); }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <span class="dot" id="conn" title="연결 상태"></span>
+    <span class="who" id="who"></span>
+    <nav class="ptabs" id="ptabs"></nav>
+    <button class="sm ghost" id="logout">나가기</button>
+  </header>
+  <main>
+    <section class="ppanel" id="ppanel">
+      <div class="row" style="justify-content:space-between;margin-bottom:6px">
+        <span class="muted small" id="lesson-title"></span>
+        <button class="sm toggle-p" id="toggle-p">접기</button>
+      </div>
+      <div id="problem"></div>
+    </section>
+    <section class="work">
+      <div class="tools" id="tools">
+        <button data-color="#111827" title="검정"><span class="sw" style="background:#111827"></span></button>
+        <button data-color="#2563eb" title="파랑"><span class="sw" style="background:#2563eb"></span></button>
+        <button data-color="#dc2626" title="빨강"><span class="sw" style="background:#dc2626"></span></button>
+        <button id="t-width" title="굵기">✒️</button>
+        <hr>
+        <button id="t-eraser" title="지우개 (획 단위)">🧽</button>
+        <button id="t-undo" title="되돌리기">↶</button>
+        <button id="t-clear" title="전체 지우기">🗑️</button>
+        <hr>
+        <button id="t-pen" title="펜만 쓰기 (손바닥 방지, 손가락은 스크롤)">✍️</button>
+      </div>
+      <div class="board-wrap" id="wrap"><canvas id="board"></canvas></div>
+      <div class="answer">
+        <input id="answer" placeholder="답 입력" autocomplete="off" enterkeyhint="send">
+        <button class="primary" id="submit">제출</button>
+        <span class="st muted" id="submit-st"></span>
+      </div>
+    </section>
+  </main>
+</div>
+<div class="overlay hidden" id="waiting">
+  <div>
+    <div style="font-size:48px">📚</div>
+    <h2 id="wait-title">진행 중인 수업이 없어요</h2>
+    <p class="muted">선생님이 수업을 시작하면 자동으로 열려요.</p>
+  </div>
+</div>
+<script src="/vendor/katex/katex.min.js"></script>
+<script src="/socket.io/socket.io.min.js"></script>
+<script type="module" src="/js/student.js"></script>
+</body>
+</html>
