@@ -4,7 +4,8 @@ import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 
-export const DATA_DIR = path.resolve(process.env.DATA_DIR || "data");
+// 기본값: math-class/data (실행 위치와 무관)
+export const DATA_DIR = path.resolve(process.env.DATA_DIR || path.join(import.meta.dirname, "..", "data"));
 export const UPLOAD_DIR = path.join(DATA_DIR, "uploads");
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
@@ -116,6 +117,13 @@ CREATE TABLE IF NOT EXISTS messages (
   created_at INTEGER NOT NULL
 );
 `);
+
+// ---- 이전 버전 DB에 새 컬럼 추가 (있으면 건너뜀)
+function addColumn(table, col, def) {
+  const cols = db.prepare(`PRAGMA table_info(${table})`).all().map((c) => c.name);
+  if (!cols.includes(col)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${def}`);
+}
+addColumn("teachers", "disabled", "INTEGER NOT NULL DEFAULT 0");
 
 export const newId = (n = 12) => crypto.randomBytes(16).toString("base64url").slice(0, n);
 export const now = () => Date.now();

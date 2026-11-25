@@ -15,7 +15,21 @@ const current = new Map(); // `${lessonId}:${studentId}` → problemId (학생�
 const online = new Map(); // `${lessonId}:${studentId}` → 접속 소켓 수
 const lessonProblemIds = new Map(); // lessonId → Set(problemId)
 
+const endedLessons = new Set(); // 끝난 수업: 학생 소켓이 아직 모르고 보내는 필기를 막음
+
 const wkey = (l, s, p) => `${l}:${s}:${p}`;
+
+// 좌표 [x, y, 경과ms] 만 받음 (그 외 값은 버림)
+const cleanPoints = (p, max) => {
+  const out = [];
+  for (const pt of p) {
+    if (out.length >= max) break;
+    if (!Array.isArray(pt)) continue;
+    const [x, y, t] = pt.map(Number);
+    if (Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(t)) out.push([x, y, t]);
+  }
+  return out;
+};
 
 function loadWork(lessonId, studentId, problemId, create) {
   const key = wkey(lessonId, studentId, problemId);
@@ -108,6 +122,8 @@ export const live = {
     io.to(`class:${l.class_id}`).emit("lesson:start", { lessonId });
   },
   lessonEnded(lessonId, classId) {
+    endedLessons.add(lessonId);
+    lessonProblemIds.delete(lessonId);
     if (!io) return;
     io.to(`class:${classId}`).emit("lesson:end", { lessonId });
     io.to(teachersRoom(lessonId)).emit("lesson:end", { lessonId });
@@ -186,7 +202,7 @@ function onStudent(socket, u) {
   socket.on("disconnect", leave);
 
   const guard = (problemId) => {
-    if (!lessonId) enter();
+    if (!lessonId || endedLessons.has(lessonId)) enter();
     return lessonId && problemIdsOf(lessonId).has(problemId);
   };
   const touch = (w) => {
@@ -210,7 +226,7 @@ function onStudent(socket, u) {
     if (w.strokes.length >= MAX_STROKES) return;
     const s = {
       id: String(stroke.id).slice(0, 24), c: String(stroke.c || "#111").slice(0, 9),
-      w: Math.min(30, Math.max(1, +stroke.w || 3)), st: now(), p: stroke.p.slice(0, MAX_POINTS), del: null,
+      w: Math.min(30, Math.max(1, +stroke.w || 3)), st: now(), p: cleanPoints(stroke.p, MAX_POINTS), del: null,
     };
     w.strokes.push(s);
     touch(w);
@@ -221,10 +237,12 @@ function onStudent(socket, u) {
     if (!guard(problemId) || !Array.isArray(p)) return;
     const w = loadWork(lessonId, u.id, problemId, false);
     const s = w?.strokes.findLast((x) => x.id === id);
-    if (!s || s.p.length + p.length > MAX_POINTS) return;
-    s.p.push(...p);
+    if (!s) return;
+    const pts = cleanPoints(p, MAX_POINTS - s.p.length);
+    if (!pts.length) return;
+    s.p.push(...pts);
     touch(w);
-    toTeachers("stroke:add", { problemId, id, p });
+    toTeachers("stroke:add", { problemId, id, p: pts });
   });
 
   const setDeleted = (ev, problemId, ids, value) => {
@@ -289,7 +307,10 @@ function onTeacher(socket, u) {
   });
 
   socket.on("message:send", ({ studentId, text } = {}, ack) => {
-    if (!lessonId || !text?.trim()) return ack?.({ error: "내용을 입력하세요." });
+    if (!lessonId || !String(text ?? "").trim()) return ack?.({ error: "내용을 입력하세요." });
+    const l = q.get("SELECT class_id FROM lessons WHERE id = ?", lessonId);
+    if (studentId && !q.get("SELECT 1 FROM students WHERE id = ? AND class_id = ?", studentId, l?.class_id))
+      return ack?.({ error: "이 수업의 학생이 아닙니다." });
     const msg = { text: String(text).slice(0, 500), at: now(), from: u.name };
     q.run("INSERT INTO messages (lesson_id, student_id, text, created_at) VALUES (?,?,?,?)", lessonId, studentId || null, msg.text, msg.at);
     if (studentId) io.to(`student:${studentId}`).emit("message", msg);

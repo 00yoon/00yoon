@@ -370,14 +370,23 @@ async function pageAdmin() {
         },
       }, "추가"))),
     h("table.card", h("thead", h("tr", h("th", "아이디"), h("th", "이름"), h("th", "권한"), h("th"))),
-      h("tbody", teachers.map((t) => h("tr", h("td", t.login_id), h("td", t.name), h("td", t.is_admin ? "관리자" : "교사"),
+      h("tbody", teachers.map((t) => h("tr", h("td", t.login_id), h("td", t.name),
+        h("td", (t.is_admin ? "관리자" : "교사") + (t.disabled ? " (사용 중지)" : "")),
         h("td", h("button.sm", {
           onclick: async () => {
             const p = prompt(`${t.name} 선생님의 새 비밀번호 (6자 이상)`);
             if (!p) return;
             try { await api(`/admin/teachers/${t.id}/password`, { method: "POST", body: { password: p } }); toast("변경했어요"); } catch (e) { toast(e.message, "error"); }
           },
-        }, "비밀번호 변경")))))),
+        }, "비밀번호 변경"), " ",
+        t.id === me.id ? null : h("button.sm", {
+          onclick: async () => {
+            const disabled = !t.disabled;
+            if (disabled && !(confirm(`${t.name} 선생님 계정을 사용 중지할까요? 로그인할 수 없게 되며, 만든 문제 세트와 수업 기록은 남습니다.`))) return;
+            try { await api(`/admin/teachers/${t.id}/disabled`, { method: "POST", body: { disabled } }); toast(disabled ? "사용 중지했어요" : "다시 사용하게 했어요"); route(); }
+            catch (e) { toast(e.message, "error"); }
+          },
+        }, t.disabled ? "다시 사용" : "사용 중지")))))),
   );
 }
 

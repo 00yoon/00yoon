@@ -42,7 +42,7 @@ export function userFromToken(token) {
   const t = q.get("SELECT * FROM auth_tokens WHERE token = ?", token);
   if (!t || now() - t.created_at > TOKEN_TTL) return null;
   if (t.kind === "teacher") {
-    const u = q.get("SELECT id, login_id, name, is_admin FROM teachers WHERE id = ?", t.user_id);
+    const u = q.get("SELECT id, login_id, name, is_admin FROM teachers WHERE id = ? AND disabled = 0", t.user_id);
     return u && { kind: "teacher", ...u };
   }
   const s = q.get(
@@ -64,6 +64,11 @@ function auth(kind) {
 const teacher = auth("teacher");
 const student = auth("student");
 const admin = [teacher, (req, res, next) => (req.user.is_admin ? next() : res.status(403).json({ error: "관리자만 가능합니다." }))];
+
+// 만료된 로그인 토큰 정리 (시작 시 + 하루마다)
+const purgeTokens = () => q.run("DELETE FROM auth_tokens WHERE created_at < ?", now() - TOKEN_TTL);
+purgeTokens();
+setInterval(purgeTokens, 24 * 60 * 60 * 1000).unref();
 
 function issueToken(kind, userId) {
   const token = crypto.randomBytes(32).toString("base64url");
@@ -129,6 +134,7 @@ api.post("/login/teacher", h((req) => {
   throttle(`t:${req.ip}:${loginId}`);
   const t = q.get("SELECT * FROM teachers WHERE login_id = ?", String(loginId || "").trim());
   if (!t || !checkPw(password, t.pw_hash)) fail(401, "아이디 또는 비밀번호가 맞지 않습니다.");
+  if (t.disabled) fail(403, "사용 중지된 계정입니다. 관리자에게 문의하세요.");
   return { token: issueToken("teacher", t.id), user: { kind: "teacher", id: t.id, name: t.name, login_id: t.login_id, is_admin: !!t.is_admin } };
 }));
 
@@ -155,7 +161,7 @@ api.post("/me/password", teacher, h((req) => {
 
 // ================= 관리자: 교사 계정 =================
 api.get("/admin/teachers", admin, h(() => ({
-  teachers: q.all("SELECT id, login_id, name, is_admin, created_at FROM teachers ORDER BY created_at"),
+  teachers: q.all("SELECT id, login_id, name, is_admin, disabled, created_at FROM teachers ORDER BY created_at"),
 })));
 api.post("/admin/teachers", admin, h((req) => {
   const { loginId, name, password } = req.body || {};
@@ -171,6 +177,16 @@ api.post("/admin/teachers/:id/password", admin, h((req) => {
   if (!password || String(password).length < 6) fail(400, "비밀번호는 6자 이상이어야 합니다.");
   q.run("UPDATE teachers SET pw_hash = ? WHERE id = ?", hashPw(password), req.params.id);
   q.run("DELETE FROM auth_tokens WHERE kind='teacher' AND user_id = ?", req.params.id);
+}));
+
+// 퇴직·전근 교사: 계정을 지우지 않고 사용 중지 (만든 문제 세트·수업 기록은 그대로 남음)
+api.post("/admin/teachers/:id/disabled", admin, h((req) => {
+  const t = q.get("SELECT * FROM teachers WHERE id = ?", req.params.id);
+  if (!t) fail(404, "교사를 찾을 수 없습니다.");
+  if (t.id === req.user.id) fail(400, "내 계정은 사용 중지할 수 없습니다.");
+  const disabled = req.body?.disabled ? 1 : 0;
+  q.run("UPDATE teachers SET disabled = ? WHERE id = ?", disabled, t.id);
+  if (disabled) q.run("DELETE FROM auth_tokens WHERE kind='teacher' AND user_id = ?", t.id);
 }));
 
 // ================= 학급 / 학생 =================
@@ -229,7 +245,10 @@ api.post("/classes/:id/students", teacher, h((req) => {
       const [no, name, pw] = parts;
       if (!/^\d{3,8}$/.test(no || "") || !name) { errors.push(`형식 오류: ${line}`); continue; }
       const exists = q.get("SELECT * FROM students WHERE school_year = ? AND student_no = ?", c.school_year, no);
-      if (exists && exists.class_id !== c.id) { errors.push(`${no}: 다른 학급(${exists.class_id})에 이미 등록됨`); continue; }
+      if (exists && exists.class_id !== c.id) {
+        const other = q.get("SELECT name FROM classes WHERE id = ?", exists.class_id)?.name || "다른 학급";
+        errors.push(`${no}: ${other}에 이미 등록됨`); continue;
+      }
       const password = pw && /^\d{4}$/.test(pw) ? pw : null;
       if (exists) {
         q.run("UPDATE students SET name = ? WHERE id = ?", name, exists.id);
