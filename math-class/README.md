@@ -28,6 +28,8 @@ npm start          # http://localhost:3000
 - 데이터 위치는 `DATA_DIR`(기본 `./data`)입니다. 여기에 `app.db`와 `uploads/`가 들어가며, **이 폴더만 백업하면 됩니다.**
 
 ## 클라우드 배포
+> Fly.io·Railway 단계별 안내, 환경변수, 백업, **학생 개인정보 외부 저장 안내**는 [DEPLOY.md](DEPLOY.md)를 보세요.
+
 Docker 이미지 하나로 돌아갑니다. **`/data`는 반드시 영구 디스크(볼륨)에 연결하세요.** 연결하지 않으면 재배포할 때 데이터가 사라집니다.
 ```bash
 docker build -t math-class .

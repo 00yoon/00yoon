@@ -3,3 +3,9 @@ data
 test
 .git
 *.md
+.env
+.env.*
+fly.toml
+railway.json
+Dockerfile
+.dockerignore
